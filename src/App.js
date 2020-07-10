@@ -1,8 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react';
 import './App.css';
-import io from "socket.io-client";
+import sio from "socket.io-client";
 import Peer from "simple-peer";
 import styled from "styled-components";
+
+const io = sio('https://signals-server.herokuapp.com');
 
 const Container = styled.div`
   height: 100vh;
