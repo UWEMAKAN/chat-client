@@ -1,10 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import './App.css';
-import sio from "socket.io-client";
+import io from "socket.io-client";
 import Peer from "simple-peer";
 import styled from "styled-components";
-
-const io = sio('https://signals-server.herokuapp.com');
 
 const Container = styled.div`
   height: 100vh;
@@ -38,7 +36,7 @@ function App() {
   const socket = useRef();
 
   useEffect(() => {
-    socket.current = io.connect("/");
+    socket.current = io.connect("https://signals-server.herokuapp.com");
     navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(stream => {
       setStream(stream);
       if (userVideo.current) {
