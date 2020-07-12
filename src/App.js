@@ -102,7 +102,7 @@ class App extends Component {
     });
     this.peerConnection.current.addStream(this.state.localStream);
     this.peerConnection.current.onicecandidate = this.onIceCandiate;
-    this.peerConnection.current.onAddStream = this.onAddStream;
+    this.peerConnection.current.onaddstream = this.onAddStream;
     this.socket.current.on('candidate', this.onCandidate);
     this.socket.current.on('answer', this.onAnswer);
     callback();
