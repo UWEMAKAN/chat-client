@@ -11,6 +11,7 @@ class App extends Component {
     this.startCallButton = createRef();
     this.acceptCallButton = createRef();
     this.endCallButton = createRef();
+    this.holdCallButton = createRef();
     this.peerConnection = createRef();
     this.localICECandidates = createRef([]);
     this.connected = createRef(false);
@@ -40,6 +41,8 @@ class App extends Component {
         username: name
       }));
       this.onMediaStream(stream);
+      this.endCallButton.current.onclick = this.onEndCall;
+      this.holdCallButton.current.onclick = this.onHoldCall;
     })
     .catch((error) => {
       console.log(error);
@@ -58,6 +61,7 @@ class App extends Component {
       this.startCallButton.current.onclick = this.onStartCall;
     });
     this.socket.current.on('offer', this.onOffer);
+    this.socket.current.on('end', this.onEnd);
   }
 
   onUser = (userString) => {
@@ -93,6 +97,29 @@ class App extends Component {
     this.socket.current.on('token', this.onToken(this.createAnswer(offer)));
     this.socket.current.emit('token');
     this.acceptCallButton.current.setAttribute('disabled', 'disabled');
+  }
+
+  onHoldCall = () => {
+    this.peerConnection.current.removeTrack();
+  }
+
+  onEndCall = () => {
+    this.socket.current.emit('end');
+    this.socket.current.disconnect();
+    const senders = this.peerConnection.current.getSenders();
+    senders.forEach((sender) => {
+      this.peerConnection.current.removeTrack(sender);
+    });
+    this.endCallButton.current.setAttribute('disabled', 'disabled');
+  }
+
+  onEnd = () => {
+    this.socket.current.disconnect();
+    const senders = this.peerConnection.current.getSenders();
+    senders.forEach((sender) => {
+      this.peerConnection.current.removeTrack(sender);
+    });
+    this.endCallButton.current.setAttribute('disabled', 'disabled');
   }
 
   createAnswer = (offer) => () => {
@@ -174,6 +201,7 @@ class App extends Component {
           <button type="button" disabled ref={this.startCallButton} id="startCall">Call</button>
           <button type="button" disabled ref={this.acceptCallButton} id="acceptCall">Accept</button>
           <button type="button" disabled ref={this.endCallButton} id="endCall">End</button>
+          <button type="button" disabled ref={this.holdCallButton} id="holdCall">Hold</button>
         </div>
       </>
     );
