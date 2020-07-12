@@ -22,14 +22,16 @@ class App extends Component {
     users: {},
     localStream: null,
     remoteStream: null,
+    offer: null
   }
   componentDidMount() {
-    let name;
-    do {
-      name = prompt('please enter your name?', '');
-    }
-    while (!name);
-    this.socket.current = io.connect('https://uwem-signal-server.herokuapp.com');
+    let name = 'name';
+    // do {
+    //   name = prompt('please enter your name?', '');
+    // }
+    // while (!name);
+    // this.socket.current = io.connect('https://uwem-signal-server.herokuapp.com');
+    this.socket.current = io.connect('http://localhost:8000');
     navigator.mediaDevices
     .getUserMedia({ video: true, audio: true })
     .then((stream) => {
@@ -71,17 +73,30 @@ class App extends Component {
 
   onStartCall = (event) => {
     this.startCallButton.current.setAttribute('disabled', 'disabled');
+    this.endCallButton.current.removeAttribute('disabled');
     this.socket.current.emit('token');
     this.socket.current.on('token', this.onToken(this.createOffer));
   }
 
   onOffer = (offer) => {
+    this.setState((prevState) => ({
+      ...prevState,
+      offer
+    }));
+    this.startCallButton.current.setAttribute('disabled', 'disabled');
+    this.endCallButton.current.removeAttribute('disabled');
+    this.acceptCallButton.current.removeAttribute('disabled');
+    this.acceptCallButton.current.onclick = this.onAcceptCall
+  }
+
+  onAcceptCall = () => {
+    const { offer } = this.state;
     this.socket.current.on('token', this.onToken(this.createAnswer(offer)));
     this.socket.current.emit('token');
+    this.acceptCallButton.current.setAttribute('disabled', 'disabled');
   }
 
   createAnswer = (offer) => () => {
-    this.startCallButton.current.setAttribute('disabled', 'disabled');
     this.connected.current = true;
     const rtcOffer = new RTCSessionDescription(JSON.parse(offer));
     this.peerConnection.current.setRemoteDescription(rtcOffer);
