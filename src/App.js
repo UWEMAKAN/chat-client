@@ -1,149 +1,169 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { Component, createRef } from 'react';
 import './App.css';
-import io from "socket.io-client";
-import Peer from "simple-peer";
-import styled from "styled-components";
+import io from 'socket.io-client';
 
-const Container = styled.div`
-  height: 100vh;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-`;
+class App extends Component {
+  constructor() {
+    super();
+    this.localVideo = createRef();
+    this.remoteVideo = createRef();
+    this.socket = createRef();
+    this.startCallButton = createRef();
+    this.acceptCallButton = createRef();
+    this.endCallButton = createRef();
+    this.peerConnection = createRef();
+    this.localICECandidates = createRef([]);
+    this.connected = createRef(false);
+  }
 
-const Row = styled.div`
-  display: flex;
-  width: 100%;
-`;
-
-const Video = styled.video`
-  border: 1px solid blue;
-  width: 50%;
-  height: 50%;
-`;
-
-function App() {
-  const [yourID, setYourID] = useState("");
-  const [users, setUsers] = useState({});
-  const [stream, setStream] = useState();
-  const [receivingCall, setReceivingCall] = useState(false);
-  const [caller, setCaller] = useState("");
-  const [callerSignal, setCallerSignal] = useState();
-  const [callAccepted, setCallAccepted] = useState(false);
-
-  const userVideo = useRef();
-  const partnerVideo = useRef();
-  const socket = useRef();
-
-  useEffect(() => {
-    socket.current = io.connect("https://signals-server.herokuapp.com");
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(stream => {
-      setStream(stream);
-      if (userVideo.current) {
-        userVideo.current.srcObject = stream;
-      }
+  state = {
+    username: '',
+    callerName: '',
+    users: {},
+    localStream: null,
+    remoteStream: null,
+  }
+  componentDidMount() {
+    let name;
+    do {
+      name = prompt('please enter your name?', '');
+    }
+    while (!name);
+    this.socket.current = io.connect('https://uwem-signal-server.herokuapp.com');
+    navigator.mediaDevices
+    .getUserMedia({ video: true, audio: true })
+    .then((stream) => {
+      this.setState((prevState) => ({
+        ...prevState,
+        localStream: stream,
+        username: name
+      }));
+      this.onMediaStream(stream);
     })
-
-    socket.current.on("yourID", (id) => {
-      setYourID(id);
-    })
-    socket.current.on("allUsers", (users) => {
-      setUsers(users);
-    })
-
-    socket.current.on("hey", (data) => {
-      setReceivingCall(true);
-      setCaller(data.from);
-      setCallerSignal(data.signal);
-    })
-  }, []);
-
-  function callPeer(id) {
-    const peer = new Peer({
-      initiator: true,
-      trickle: false,
-      stream
-    });
-
-    peer.on('signal', (data) => {
-      socket.current.emit('callUser', { userToCall: id, signalData: data, from: yourID });
-    });
-
-    peer.on('stream', (stream) => {
-      if (partnerVideo.current) {
-        partnerVideo.current.srcObject = stream;
-      }
-    });
-
-    socket.current.on('callAccepted', (signal) => {
-      setCallAccepted(true);
-      peer.signal(signal);
+    .catch((error) => {
+      console.log(error);
     });
   }
 
-  function acceptCall() {
-    setCallAccepted(true);
-    const peer = new Peer({
-      initiator: false,
-      trickle: false,
-      stream
+  onMediaStream = (stream) => {
+    const { username } = this.state;
+    this.localVideo.current.srcObject = stream;
+    this.localVideo.current.volume = 0;
+    const info = { room: 'test', username };
+    this.socket.current.emit('join', JSON.stringify(info));
+    this.socket.current.on('user', this.onUser);
+    this.socket.current.on('ready', () => {
+      this.startCallButton.current.removeAttribute('disabled');
+      this.startCallButton.current.onclick = this.onStartCall;
     });
-
-    peer.on('signal', (data) => {
-      socket.current.emit('acceptCall', { signal: data, to: caller });
-    });
-
-    peer.on('stream', (stream) => {
-      partnerVideo.current.srcObject = stream;
-    });
-
-    peer.signal(callerSignal);
+    this.socket.current.on('offer', this.onOffer);
   }
 
-  let UserVideo;
-  if (stream) {
-    UserVideo = (
-      <Video playsInline muted ref={userVideo} autoPlay />
+  onUser = (userString) => {
+    const user = JSON.parse(userString);
+    this.setState((prevState) => ({
+      ...prevState,
+      users: {
+        user
+      }
+    }))
+  }
+
+  onStartCall = (event) => {
+    this.startCallButton.current.setAttribute('disabled', 'disabled');
+    this.socket.current.emit('token');
+    this.socket.current.on('token', this.onToken(this.createOffer));
+  }
+
+  onOffer = (offer) => {
+    this.socket.current.on('token', this.onToken(this.createAnswer(offer)));
+    this.socket.current.emit('token');
+  }
+
+  createAnswer = (offer) => () => {
+    this.startCallButton.current.setAttribute('disabled', 'disabled');
+    this.connected.current = true;
+    const rtcOffer = new RTCSessionDescription(JSON.parse(offer));
+    this.peerConnection.current.setRemoteDescription(rtcOffer);
+    this.peerConnection.current.createAnswer(
+      (answer) => {
+        this.peerConnection.current.setLocalDescription(answer);
+        this.socket.current.emit('answer', JSON.stringify(answer));
+      },
+      (err) => {
+        console.log(err);
+      }
     );
   }
 
-  let PartnerVideo;
-  if (callAccepted) {
-    PartnerVideo = (
-      <Video playsInline ref={partnerVideo} autoPlay />
+  onToken = (callback) => (token) => {
+    this.peerConnection.current = new RTCPeerConnection({
+      iceServers: token.iceServers
+    });
+    this.peerConnection.current.addStream(this.state.localStream);
+    this.peerConnection.current.onicecandidate = this.onIceCandiate;
+    this.peerConnection.current.onAddStream = this.onAddStream;
+    this.socket.current.on('candidate', this.onCandidate);
+    this.socket.current.on('answer', this.onAnswer);
+    callback();
+  }
+
+  onAddStream = (event) => {
+    this.remoteVideo.current.srcObject = event.stream;
+  }
+
+  onCandidate = (candidate) => {
+    const rtcCandidate = new RTCIceCandidate(JSON.parse(candidate));
+    this.peerConnection.current.addIceCandidate(rtcCandidate);
+  }
+
+  onAnswer = (answer) => {
+    const rtcAnswer = new RTCSessionDescription(JSON.parse(answer));
+    this.peerConnection.current.setRemoteDescription(rtcAnswer);
+    this.connected.current = true;
+    this.localICECandidates.current.forEach((candidate) => {
+      this.socket.current.emit('candidate', JSON.stringify(candidate));
+    });
+    this.localICECandidates.current = [];
+  }
+
+  createOffer = () => {
+    this.peerConnection.current.createOffer(
+      (offer) => {
+        this.peerConnection.current.setLocalDescription(offer);
+        this.socket.current.emit('offer', JSON.stringify(offer));
+      },
+      (err) => {
+        console.log(err);
+      }
     );
   }
 
-  let incomingCall;
-  if (receivingCall) {
-    incomingCall = (
-      <div>
-        <h1>{caller} is calling you</h1>
-        <button onClick={acceptCall}>Accept</button>
-      </div>
-    )
+  onIceCandiate = (event) => {
+    if (event.candidate) {
+      if (this.connected.current) {
+        this.socket.current.emit('candidate', JSON.stringify(event.candidate));
+      } else {
+        this.localICECandidates.current = [];
+        this.localICECandidates.current.push(event.candidate);
+      }
+    }
   }
-  return (
-    <Container>
-      <Row>
-        {UserVideo}
-        {PartnerVideo}
-      </Row>
-      <Row>
-        {Object.keys(users).map(key => {
-          if (key === yourID) {
-            return null;
-          }
-          return (
-            <button onClick={() => callPeer(key)}>Call {key}</button>
-          );
-        })}
-      </Row>
-      <Row>
-        {incomingCall}
-      </Row>
-    </Container>
-  );
+  
+  render() {
+    return (
+      <>
+        <h1>Video Chat</h1>
+        <video ref={this.localVideo} muted id="local-video" height="300" autoPlay></video>
+        <video ref={this.remoteVideo} id="remote-video" height="300" autoPlay></video>
+        <div>
+          <button type="button" disabled ref={this.startCallButton} id="startCall">Call</button>
+          <button type="button" disabled ref={this.acceptCallButton} id="acceptCall">Accept</button>
+          <button type="button" disabled ref={this.endCallButton} id="endCall">End</button>
+        </div>
+      </>
+    );
+  }
 }
 
 export default App;
