@@ -25,13 +25,12 @@ class App extends Component {
     offer: null
   }
   componentDidMount() {
-    let name = 'name';
-    // do {
-    //   name = prompt('please enter your name?', '');
-    // }
-    // while (!name);
-    // this.socket.current = io.connect('https://uwem-signal-server.herokuapp.com');
-    this.socket.current = io.connect('http://localhost:8000');
+    let name;
+    do {
+      name = prompt('please enter your name?', '');
+    }
+    while (!name);
+    this.socket.current = io.connect('https://uwem-signal-server.herokuapp.com');
     navigator.mediaDevices
     .getUserMedia({ video: true, audio: true })
     .then((stream) => {
