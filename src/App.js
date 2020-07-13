@@ -97,10 +97,11 @@ class App extends Component {
     this.socket.current.on('token', this.onToken(this.createAnswer(offer)));
     this.socket.current.emit('token');
     this.acceptCallButton.current.setAttribute('disabled', 'disabled');
+    this.holdCallButton.current.removeAttribute('disabled');
   }
 
   onHoldCall = () => {
-    this.peerConnection.current.removeTrack();
+    
   }
 
   onEndCall = () => {
@@ -159,6 +160,7 @@ class App extends Component {
   }
 
   onAnswer = (answer) => {
+    this.holdCallButton.current.removeAttribute('disabled');
     const rtcAnswer = new RTCSessionDescription(JSON.parse(answer));
     this.peerConnection.current.setRemoteDescription(rtcAnswer);
     this.connected.current = true;
